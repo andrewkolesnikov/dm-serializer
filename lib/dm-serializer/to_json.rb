@@ -15,12 +15,14 @@ module DataMapper
     #
     # @since 1.0.1
     #
-    def as_json(options={})
-      result = {}
+    def as_json(options = {})
+      options = {} if options.nil?
+      result  = {}
 
       properties_to_serialize(options).each do |property|
         property_name = property.name
-        result[property_name] = __send__(property_name)
+        value = __send__(property_name)
+        result[property_name] = value.kind_of?(DataMapper::Model) ? value.name : value
       end
 
       # add methods
@@ -45,8 +47,8 @@ module DataMapper
     #
     # @return <String> a JSON representation of the Resource
     def to_json(*args)
-      options = args.first || {}
-      options = options.to_h if options.respond_to?(:to_h)
+      options = args.first
+      options = {} unless options.kind_of?(Hash)
 
       result = as_json(options)
 
@@ -68,33 +70,16 @@ module DataMapper
 
   end
 
-
-  module Associations
-    # the json gem adds Object#to_json, which breaks the DM proxies, since it
-    # happens *after* the proxy has been blank slated. This code removes the added
-    # method, so it is delegated correctly to the Collection
-    proxies = []
-
-    proxies << ManyToMany::Proxy if defined?(ManyToMany::Proxy)
-    proxies << OneToMany::Proxy  if defined?(OneToMany::Proxy)
-    proxies << ManyToOne::Proxy  if defined?(ManyToOne::Proxy)
-
-    proxies.each do |proxy|
-      if proxy.public_instance_methods.any? { |m| m.to_sym == :to_json }
-        proxy.send(:undef_method, :to_json)
-      end
-    end
-  end
-
   class Collection
     def to_json(*args)
-      opts = args.first || {}
+      options = args.first
+      options = {} unless options.kind_of?(Hash)
 
-      options = opts.merge(:to_json => false)
-      collection = map { |e| e.to_json(options) }
+      resource_options = options.merge(:to_json => false)
+      collection = map { |resource| resource.to_json(resource_options) }
 
       # default to making JSON
-      if opts.fetch(:to_json, true)
+      if options.fetch(:to_json, true)
         collection.to_json
       else
         collection
